@@ -5,6 +5,12 @@ module Fotolia
 
     banner "knife consistency [latest ENVIRONMENT|local]"
 
+    option :ruby,
+           :short => '-r',
+           :long => '--ruby',
+           :boolean => false,
+           :description => "Dump ruby config"
+
     deps do
       require 'chef/knife/search'
       require 'chef/environment'
@@ -27,6 +33,8 @@ module Fotolia
         @environment = name_args[1]
       end
 
+      ruby_output = {}
+
       case @action
         when "latest"
           target_versions = get_versions_from_env(@environment)
@@ -35,6 +43,7 @@ module Fotolia
           latest_versions.each_pair do |name, cb_version|
             unless target_versions.has_key?(name)
               puts "cookbook \"#{name}\" has no version constraint in environment #{@environment} !"
+              ruby_output[name] = cb_version
               next
             end
 
@@ -60,7 +69,12 @@ module Fotolia
 
           end
       end
+
+      if config[:ruby]
+        puts ruby_output.inspect
+      end
     end
+
 
     # ger cookbook for a known environment
     def get_versions_from_env(env_name)
