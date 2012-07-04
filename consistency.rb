@@ -3,7 +3,7 @@ require 'chef/knife'
 module Fotolia
   class Consistency < Chef::Knife
 
-    banner "knife consistency [latest ENVIRONMENT|local]"
+    banner "knife consistency [latest ENVIRONMENT|local|frozen ENVIRONMENT]"
 
     option :ruby,
            :short => '-r',
@@ -11,31 +11,54 @@ module Fotolia
            :boolean => false,
            :description => "Dump ruby config"
 
+    option :freeze,
+           :short => '-f',
+           :long => '--freeze',
+           :boolean => false,
+           :description => "Freeze cookbooks"
+
     deps do
       require 'chef/knife/search'
       require 'chef/environment'
       require 'chef/cookbook/metadata'
+      require 'chef/json_compat'
+      require 'uri'
+      require 'chef/cookbook_version'
     end
 
     def run
       if name_args.count < 1 then
-        ui.error "Usage : knife consistency [latest ENVIRONMENT|local]"
+        ui.error "Usage : knife consistency [latest ENVIRONMENT|local|frozen ENVIRONMENT]"
         exit 1
       end
 
       @action = name_args.first
-      unless ["latest","local"].include?(@action)
+      unless ["latest","local","freezed"].include?(@action)
         ui.error "You must specify a mode !"
         exit 1
       end
 
-      if @action == "latest" then
+      if @action == "latest" or @action == "freezed" then
         @environment = name_args[1]
       end
 
       ruby_output = {}
 
       case @action
+        when "frozen"
+          target_versions = get_versions_from_env(@environment)
+          target_versions.each_pair do |name, cb_version|
+
+            metadata = rest.get_rest("cookbooks/#{name}/#{cb_version}")
+            puts "cookbook \"#{name}\" is not frozen" unless metadata.frozen_version?
+
+            if config[:freeze] and not metadata.frozen_version?
+              metadata.freeze_version
+              metadata.chef_server_rest.put_rest(metadata.save_url, metadata)
+            end
+
+          end
+
         when "latest"
           target_versions = get_versions_from_env(@environment)
           latest_versions = get_latest_versions()
@@ -49,6 +72,7 @@ module Fotolia
 
             if target_versions[name] != cb_version then
               puts "cookbook \"#{name}\" is not up to date. latest is #{cb_version}, #{@environment} has version #{target_versions[name]}"
+              ruby_output[name] = cb_version
             end
 
           end
